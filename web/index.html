@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Unsafe0Server — Personal file server with a modern interface" />
   <title>Unsafe0Server</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="dark-mode">
@@ -11,11 +15,11 @@
     <div class="login-overlay hidden" id="loginOverlay">
       <form class="login-card" id="loginForm">
         <div class="login-title">Unsafe0Server</div>
-        <div class="login-sub">Enter username and password to continue</div>
+        <div class="login-sub">Sign in to access your files</div>
         <input class="login-input" id="loginUsername" type="text" placeholder="Username" autocomplete="username" />
         <input class="login-input" id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
         <div class="login-error" id="loginError"></div>
-        <button class="login-btn" type="submit">Login</button>
+        <button class="login-btn" type="submit">Sign in</button>
       </form>
     </div>
     <header class="toolbar">
@@ -27,15 +31,20 @@
           <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M10.5 18a7.5 7.5 0 1 1 5.3-12.8 7.5 7.5 0 0 1-5.3 12.8Zm5.3-2.2L21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
-          <input class="search-input" type="text" id="searchInput" placeholder="Search files" />
+          <input class="search-input" type="text" id="searchInput" placeholder="Search files…" />
         </div>
-        <button id="uploadButton" class="toolbar-button primary" type="button">Upload</button>
-        <button id="themeToggle" class="toolbar-button ghost" type="button" title="Toggle theme" aria-pressed="false">light</button>
+        <button id="uploadButton" class="toolbar-button primary" type="button">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16"><path d="M12 16V3m0 0l4 4m-4-4L8 7M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Upload
+        </button>
+        <button id="themeToggle" class="toolbar-button ghost icon-only" type="button" title="Toggle theme" aria-pressed="false">
+          <svg class="icon" id="themeIcon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
       <input type="file" id="fileInput" name="file" multiple hidden />
     </header>
     <div class="layout">
-      <main class="main">
+      <main class="main" id="mainArea">
         <div class="pathbar">
           <div class="pathbar-nav">
             <button id="backButton" class="pathbar-button" type="button" title="Back" aria-label="Back">
@@ -62,7 +71,7 @@
               <button class="layout-btn active" id="gridViewBtn" type="button" title="Grid view" aria-label="Grid view">
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm10 0h8v8h-8v-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
               </button>
-              <button class="layout-btn" id="compactViewBtn" type="button" title="Compact view" aria-label="Compact view">
+              <button class="layout-btn" id="compactViewBtn" type="button" title="List view" aria-label="List view">
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
               </button>
             </div>
@@ -82,7 +91,17 @@
                 <button class="dropdown-item" data-sort="size-smallest" type="button">Smallest first</button>
               </div>
             </div>
-            <button class="compact-action" id="newFolderButton" type="button">New folder</button>
+            <button class="compact-action" id="newFolderButton" type="button">
+              <svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14m-7-7h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              New folder
+            </button>
+          </div>
+        </div>
+        <div class="drop-zone hidden" id="dropZone">
+          <div class="drop-zone-inner">
+            <svg viewBox="0 0 24 24" width="48" height="48"><path d="M12 16V3m0 0l4 4m-4-4L8 7M5 20h14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <strong>Drop files here to upload</strong>
+            <span>Files will be uploaded to the current folder</span>
           </div>
         </div>
         <ul class="file-list" id="list"></ul>
@@ -109,26 +128,44 @@
           </button>
           <button class="preview-btn icon-btn ghost" id="previewClose" type="button" aria-label="Close">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6l12 12M18 6l-12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/>
+              <path d="M6 6l12 12M18 6l-12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
           </button>
         </div>
       </div>
       <div class="preview-body" id="previewContent">
-        <div class="preview-empty">select a file</div>
+        <div class="preview-empty">Select a file to preview</div>
       </div>
     </section>
     <div class="context-menu hidden" id="contextMenuFile">
-      <button class="menu-item" data-action="preview" type="button">Preview</button>
-      <button class="menu-item" data-action="download" type="button">Download</button>
+      <button class="menu-item" data-action="preview" type="button">
+        <svg class="menu-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        Preview
+      </button>
+      <button class="menu-item" data-action="download" type="button">
+        <svg class="menu-icon" viewBox="0 0 24 24"><path d="M12 3v11m0 0l4-4m-4 4l-4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download
+      </button>
       <div class="menu-sep"></div>
-      <button class="menu-item" data-action="rename" type="button">Rename</button>
-      <button class="menu-item danger" data-action="delete" type="button">Delete</button>
+      <button class="menu-item" data-action="rename" type="button">
+        <svg class="menu-icon" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        Rename
+      </button>
+      <button class="menu-item danger" data-action="delete" type="button">
+        <svg class="menu-icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m-7 3v7m4-7v7M5 6l1 14h12l1-14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Delete
+      </button>
     </div>
     <div class="context-menu hidden" id="contextMenuEmpty">
-      <button class="menu-item" data-action="upload" type="button">Upload</button>
+      <button class="menu-item" data-action="upload" type="button">
+        <svg class="menu-icon" viewBox="0 0 24 24"><path d="M12 16V3m0 0l4 4m-4-4L8 7M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Upload
+      </button>
       <div class="menu-sep"></div>
-      <button class="menu-item" data-action="mkdir" type="button">New Folder</button>
+      <button class="menu-item" data-action="mkdir" type="button">
+        <svg class="menu-icon" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        New Folder
+      </button>
     </div>
     <div class="modal hidden" id="modal">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -141,7 +178,7 @@
         </div>
       </div>
     </div>
-    <div class="toast" id="toast"></div>
+    <div class="toast-container" id="toastContainer"></div>
   </div>
   <script src="/app.js"></script>
 </body>

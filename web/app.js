@@ -7,10 +7,11 @@ let isAuthed = false;
 let previewDrag = null;
 let navigationHistory = [''];
 let navigationIndex = 0;
-let previewZoom = 0;
 let previewIsImage = false;
 let currentSort = 'name-asc';
 let currentLayout = 'grid';
+let selectedPaths = new Set();
+let selectionDrag = null;
 const previewZoomStep = 0.25;
 const previewZoomMin = -0.75;
 const previewZoomMax = 2;
@@ -96,10 +97,15 @@ function iconForItem(item) {
 }
 
 function showToast(msg, type = 'success') {
-  const toast = document.getElementById('toast');
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
   toast.textContent = msg;
-  toast.className = `toast ${type} show`;
-  setTimeout(() => toast.classList.remove('show'), 3000);
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('out');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
 }
 
 async function checkAuth() {
@@ -165,6 +171,7 @@ async function load(path = '') {
   try {
     if (!isAuthed) return;
     currentPath = path;
+    selectedPaths.clear();
     updateBreadcrumb();
     const bc = document.getElementById('breadcrumb');
     const pi = document.getElementById('pathInput');
@@ -231,8 +238,13 @@ function renderList(items) {
   items.forEach(item => {
     const li = document.createElement('li');
     li.className = 'file-item' + (item.isDir ? ' is-dir' : '');
+    if (selectedPaths.has(item.path)) li.classList.add('selected');
     li.dataset.path = item.path;
     li.dataset.isDir = item.isDir;
+
+    const selectDot = document.createElement('div');
+    selectDot.className = 'select-dot';
+    li.appendChild(selectDot);
 
     const previewBox = document.createElement('div');
     previewBox.className = 'file-preview';
@@ -279,11 +291,40 @@ function renderList(items) {
     li.appendChild(main);
 
     li.onclick = (e) => {
-      if (e.target.closest('.file-action')) return;
-      document.querySelectorAll('.file-item.selected').forEach(el => el.classList.remove('selected'));
-      li.classList.add('selected');
+      const path = item.path;
+      if (e.target.closest('.select-dot')) {
+        if (selectedPaths.has(path)) selectedPaths.delete(path);
+        else selectedPaths.add(path);
+        renderList(items);
+        return;
+      }
+      if (e.shiftKey && selectedPaths.size > 0) {
+        // Range select
+        const allItemEls = Array.from(document.querySelectorAll('.file-item'));
+        const lastSelected = Array.from(selectedPaths).pop();
+        const lastIdx = allItemEls.findIndex(el => el.dataset.path === lastSelected);
+        const currIdx = allItemEls.findIndex(el => el.dataset.path === path);
+        const [start, end] = [Math.min(lastIdx, currIdx), Math.max(lastIdx, currIdx)];
+        for (let i = start; i <= end; i++) {
+          selectedPaths.add(allItemEls[i].dataset.path);
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        // Toggle
+        if (selectedPaths.has(path)) selectedPaths.delete(path);
+        else selectedPaths.add(path);
+      } else {
+        // Regular click: Just preview or navigate, don't touch selection
+        if (item.isDir) {
+           navigateTo(item.path);
+        } else {
+           preview(item.path);
+        }
+      }
+      renderList(items);
+    };
+
+    li.ondblclick = (e) => {
       if (item.isDir) navigateTo(item.path);
-      else preview(item.path);
     };
 
     if (!item.isDir) {
@@ -806,7 +847,12 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 function updateThemeButton() {
   const isDark = document.body.classList.contains('dark-mode');
   const btn = document.getElementById('themeToggle');
-  btn.textContent = isDark ? 'Dark' : 'Light';
+  const icon = document.getElementById('themeIcon');
+  if (icon) {
+    icon.innerHTML = isDark
+      ? '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+      : '<circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+  }
   btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
 }
 
@@ -902,7 +948,127 @@ async function init() {
   }
   loginOverlay.classList.add('hidden');
   load('');
+  initSelectionBox();
+}
+
+function rectIntersects(r1, r2) {
+  return !(r2.left > r1.right || r2.right < r1.left || r2.top > r1.bottom || r2.bottom < r1.top);
+}
+
+function initSelectionBox() {
+  const list = document.getElementById('list');
+  const box = document.createElement('div');
+  box.className = 'selection-box';
+  document.body.appendChild(box);
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const inMain = e.target.closest('.main');
+    const inItem = e.target.closest('.file-item');
+    const inControls = e.target.closest('.content-controls, .pathbar, .toolbar, .preview-dock, .context-menu, .modal');
+    
+    if (!inMain || inControls) return;
+    
+    if (!inItem) {
+      selectedPaths.clear();
+      renderList(allItems);
+    }
+
+    selectionDrag = {
+      startX: e.clientX,
+      startY: e.clientY,
+      box: box
+    };
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!selectionDrag) return;
+    const { startX, startY, box } = selectionDrag;
+    const left = Math.min(startX, e.clientX);
+    const top = Math.min(startY, e.clientY);
+    const width = Math.abs(startX - e.clientX);
+    const height = Math.abs(startY - e.clientY);
+
+    if (width > 5 || height > 5) {
+      box.style.display = 'block';
+      box.style.left = left + 'px';
+      box.style.top = top + 'px';
+      box.style.width = width + 'px';
+      box.style.height = height + 'px';
+
+      const boxRect = box.getBoundingClientRect();
+      const items = document.querySelectorAll('.file-item');
+      items.forEach(el => {
+        const itemRect = el.getBoundingClientRect();
+        if (rectIntersects(boxRect, itemRect)) {
+          selectedPaths.add(el.dataset.path);
+        } else if (!e.ctrlKey && !e.metaKey) {
+          // If not holding ctrl, box selection is exclusive to what it touches
+          // But we only remove if it WAS selected in THIS drag session? 
+          // Simplest: box select adds to selection
+        }
+      });
+      renderList(allItems);
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (selectionDrag) {
+      selectionDrag.box.style.display = 'none';
+      selectionDrag = null;
+    }
+  });
+}
+
+// Drag and drop upload
+function initDragDrop() {
+  const mainArea = document.getElementById('mainArea');
+  const dropZone = document.getElementById('dropZone');
+  let dragCounter = 0;
+  mainArea.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    dropZone.classList.remove('hidden');
+  });
+  mainArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) { dragCounter = 0; dropZone.classList.add('hidden'); }
+  });
+  mainArea.addEventListener('dragover', (e) => e.preventDefault());
+  mainArea.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropZone.classList.add('hidden');
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) await uploadFiles(files);
+  });
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key === 'Escape') {
+    closePreview();
+    closeContextMenu();
+  }
+  if (e.key === 'Delete' && selectedPaths.size > 0) {
+    handleBulkDelete();
+  }
+});
+
+async function handleBulkDelete() {
+  const count = selectedPaths.size;
+  const ok = await askConfirm('Delete', `Delete ${count} selected item${count > 1 ? 's' : ''}?`);
+  if (!ok) return;
+  for (const path of selectedPaths) {
+    try { await apiPost('/api/delete', { path }); } catch(e) { showToast(`Failed to delete ${path}`, 'error'); }
+  }
+  selectedPaths.clear();
+  showToast(`Deleted ${count} item${count > 1 ? 's' : ''}`);
+  load(currentPath);
 }
 
 // Initial load
 init();
+initDragDrop();
