@@ -72,7 +72,7 @@ function sortItems(items, sortKey) {
 
 function isImageFile(name) {
   const ext = name.split('.').pop().toLowerCase();
-  return ['png','jpg','jpeg','gif','webp','svg'].includes(ext);
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
 }
 
 function fileUrl(path) {
@@ -87,10 +87,10 @@ function iconForItem(item) {
   if (isImageFile(item.name)) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5V5Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m8 16 3.2-3.2 2.2 2.2 1.5-1.5L19 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/></svg>';
   }
-  if (['mp4','avi','mov','mkv','webm'].includes(ext)) {
+  if (['mp4', 'avi', 'mov', 'mkv', 'webm'].includes(ext)) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v12H5V6Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m11 10 4 2-4 2v-4Z" fill="currentColor"/></svg>';
   }
-  if (['zip','rar','7z','tar','gz'].includes(ext)) {
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l3 3v15H7V3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 4h2m-2 3h2m-2 3h2m-2 3h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   }
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l3 3v15H7V3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v4h4M10 12h5M10 16h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
@@ -315,9 +315,9 @@ function renderList(items) {
       } else {
         // Regular click: Just preview or navigate, don't touch selection
         if (item.isDir) {
-           navigateTo(item.path);
+          navigateTo(item.path);
         } else {
-           preview(item.path);
+          preview(item.path);
         }
       }
       renderList(items);
@@ -366,7 +366,7 @@ async function preview(path) {
   const url = fileUrl(path);
   const ext = path.split('.').pop().toLowerCase();
 
-  if (['png','jpg','jpeg','gif','webp','svg'].includes(ext)) {
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
     previewIsImage = true;
     previewZoomOut.classList.remove('hidden');
     previewZoomIn.classList.remove('hidden');
@@ -392,7 +392,7 @@ async function preview(path) {
   previewZoomOut.classList.add('hidden');
   previewZoomIn.classList.add('hidden');
 
-  if (['mp4','avi','mov','mkv','webm'].includes(ext)) {
+  if (['mp4', 'avi', 'mov', 'mkv', 'webm'].includes(ext)) {
     const video = document.createElement('video');
     video.className = 'preview-video';
     video.controls = true;
@@ -966,9 +966,9 @@ function initSelectionBox() {
     const inMain = e.target.closest('.main');
     const inItem = e.target.closest('.file-item');
     const inControls = e.target.closest('.content-controls, .pathbar, .toolbar, .preview-dock, .context-menu, .modal');
-    
+
     if (!inMain || inControls) return;
-    
+
     if (!inItem) {
       selectedPaths.clear();
       renderList(allItems);
@@ -1062,7 +1062,7 @@ async function handleBulkDelete() {
   const ok = await askConfirm('Delete', `Delete ${count} selected item${count > 1 ? 's' : ''}?`);
   if (!ok) return;
   for (const path of selectedPaths) {
-    try { await apiPost('/api/delete', { path }); } catch(e) { showToast(`Failed to delete ${path}`, 'error'); }
+    try { await apiPost('/api/delete', { path }); } catch (e) { showToast(`Failed to delete ${path}`, 'error'); }
   }
   selectedPaths.clear();
   showToast(`Deleted ${count} item${count > 1 ? 's' : ''}`);
