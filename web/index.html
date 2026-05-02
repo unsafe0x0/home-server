@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Unsafe0Server</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="dark-mode">
+  <div class="app">
+    <div class="login-overlay hidden" id="loginOverlay">
+      <form class="login-card" id="loginForm">
+        <div class="login-title">Unsafe0Server</div>
+        <div class="login-sub">Enter username and password to continue</div>
+        <input class="login-input" id="loginUsername" type="text" placeholder="Username" autocomplete="username" />
+        <input class="login-input" id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+        <div class="login-error" id="loginError"></div>
+        <button class="login-btn" type="submit">Login</button>
+      </form>
+    </div>
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <div class="toolbar-title">Unsafe0Server</div>
+      </div>
+      <div class="toolbar-right">
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10.5 18a7.5 7.5 0 1 1 5.3-12.8 7.5 7.5 0 0 1-5.3 12.8Zm5.3-2.2L21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <input class="search-input" type="text" id="searchInput" placeholder="Search files" />
+        </div>
+        <button id="uploadButton" class="toolbar-button primary" type="button">Upload</button>
+        <button id="themeToggle" class="toolbar-button ghost" type="button" title="Toggle theme" aria-pressed="false">light</button>
+      </div>
+      <input type="file" id="fileInput" name="file" multiple hidden />
+    </header>
+    <div class="layout">
+      <main class="main">
+        <div class="pathbar">
+          <div class="pathbar-nav">
+            <button id="backButton" class="pathbar-button" type="button" title="Back" aria-label="Back">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button id="forwardButton" class="pathbar-button" type="button" title="Forward" aria-label="Forward">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <nav class="breadcrumb" id="breadcrumb"></nav>
+          <input class="path-input hidden" id="pathInput" type="text" spellcheck="false" />
+        </div>
+        <div class="content-head">
+          <div>
+            <h1 class="page-title" id="pageTitle">Files</h1>
+            <p class="page-subtitle" id="pageSubtitle">0 items</p>
+          </div>
+          <div class="content-controls">
+            <div class="layout-toggle" id="layoutToggle">
+              <button class="layout-btn active" id="gridViewBtn" type="button" title="Grid view" aria-label="Grid view">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm10 0h8v8h-8v-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="layout-btn" id="compactViewBtn" type="button" title="Compact view" aria-label="Compact view">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+            <div class="custom-dropdown" id="sortDropdown">
+              <button class="dropdown-trigger" type="button" id="sortTrigger">
+                <span id="sortLabel">Name A–Z</span>
+                <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="dropdown-menu hidden" id="sortMenu">
+                <button class="dropdown-item active" data-sort="name-asc" type="button">Name A–Z</button>
+                <button class="dropdown-item" data-sort="name-desc" type="button">Name Z–A</button>
+                <div class="dropdown-sep"></div>
+                <button class="dropdown-item" data-sort="date-newest" type="button">Newest first</button>
+                <button class="dropdown-item" data-sort="date-oldest" type="button">Oldest first</button>
+                <div class="dropdown-sep"></div>
+                <button class="dropdown-item" data-sort="size-largest" type="button">Largest first</button>
+                <button class="dropdown-item" data-sort="size-smallest" type="button">Smallest first</button>
+              </div>
+            </div>
+            <button class="compact-action" id="newFolderButton" type="button">New folder</button>
+          </div>
+        </div>
+        <ul class="file-list" id="list"></ul>
+      </main>
+    </div>
+    <section class="preview-dock hidden" id="previewDock" aria-live="polite">
+      <div class="preview-head">
+        <div class="preview-title" id="previewTitle">preview</div>
+        <div class="preview-actions">
+          <button class="preview-btn icon-btn hidden" id="previewZoomOut" type="button" aria-label="Zoom out" title="Zoom out">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 12h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="preview-btn icon-btn hidden" id="previewZoomIn" type="button" aria-label="Zoom in" title="Zoom in">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="preview-btn icon-btn" id="previewDownload" type="button" aria-label="Download">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v11m0 0l4-4m-4 4l-4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"/>
+            </svg>
+          </button>
+          <button class="preview-btn icon-btn ghost" id="previewClose" type="button" aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6l-12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="preview-body" id="previewContent">
+        <div class="preview-empty">select a file</div>
+      </div>
+    </section>
+    <div class="context-menu hidden" id="contextMenuFile">
+      <button class="menu-item" data-action="preview" type="button">Preview</button>
+      <button class="menu-item" data-action="download" type="button">Download</button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" data-action="rename" type="button">Rename</button>
+      <button class="menu-item danger" data-action="delete" type="button">Delete</button>
+    </div>
+    <div class="context-menu hidden" id="contextMenuEmpty">
+      <button class="menu-item" data-action="upload" type="button">Upload</button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" data-action="mkdir" type="button">New Folder</button>
+    </div>
+    <div class="modal hidden" id="modal">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-title" id="modalTitle">Action</div>
+        <div class="modal-body" id="modalBody"></div>
+        <input class="modal-input hidden" id="modalInput" type="text" />
+        <div class="modal-actions">
+          <button class="modal-btn ghost" id="modalCancel" type="button">Cancel</button>
+          <button class="modal-btn" id="modalOk" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
