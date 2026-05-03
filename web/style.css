@@ -501,6 +501,8 @@ input {
     min-height: 148px;
     overflow: hidden;
     user-select: none;
+    content-visibility: auto;
+    contain-intrinsic-size: 210px 148px;
     transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
     box-shadow: var(--shadow-sm)
 }
@@ -1096,17 +1098,18 @@ img.preview-image {
     flex-direction: row;
     align-items: center;
     min-height: auto;
+    contain-intrinsic-size: 1000px 57px;
     padding: 10px 14px;
     gap: 14px;
     border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-top: none;
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
     box-shadow: none
 }
 
 .file-list.compact .file-item:first-child {
-    border-top: 1px solid var(--border-color)
+    border-top-width: 1px;
 }
 
 .file-list.compact .file-item:hover {

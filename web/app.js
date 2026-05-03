@@ -8,15 +8,33 @@ let previewDrag = null;
 let navigationHistory = [''];
 let navigationIndex = 0;
 let previewIsImage = false;
+let previewZoom = 0;
 let currentSort = 'name-asc';
 let currentLayout = 'grid';
 let selectedPaths = new Set();
 let selectionDrag = null;
+let selectionFrame = 0;
+let pendingSelectionEvent = null;
+let selectionBoxInitialized = false;
+let searchTimer = 0;
 const previewZoomStep = 0.25;
 const previewZoomMin = -0.75;
 const previewZoomMax = 2;
 let previewImageNaturalWidth = 0;
 let previewImageNaturalHeight = 0;
+const thumbObserver = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries, observer) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const img = entry.target;
+        const src = img.dataset.src;
+        if (src && img.src !== src) {
+          img.src = src;
+        }
+        observer.unobserve(img);
+      });
+    }, { rootMargin: '300px 0px' })
+  : null;
 
 function getFileType(name, isDir) {
   if (isDir) return 'Folder';
@@ -75,8 +93,17 @@ function isImageFile(name) {
   return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
 }
 
+function hasGeneratedThumbnail(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext);
+}
+
 function fileUrl(path) {
   return `/files/${encodeURIComponent(path)}`;
+}
+
+function thumbUrl(path) {
+  return `/api/thumb?path=${encodeURIComponent(path)}&w=96&h=96`;
 }
 
 function iconForItem(item) {
@@ -222,7 +249,10 @@ function renderList(items) {
   const ul = document.getElementById('list');
   const query = document.getElementById('searchInput').value.trim();
   updatePageSummary(items, query);
-  ul.innerHTML = '';
+  if (thumbObserver) {
+    ul.querySelectorAll('img[data-src]').forEach(img => thumbObserver.unobserve(img));
+  }
+  ul.replaceChildren();
   if (items.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
@@ -235,6 +265,7 @@ function renderList(items) {
     ul.appendChild(empty);
     return;
   }
+  const fragment = document.createDocumentFragment();
   items.forEach(item => {
     const li = document.createElement('li');
     li.className = 'file-item' + (item.isDir ? ' is-dir' : '');
@@ -248,17 +279,24 @@ function renderList(items) {
 
     const previewBox = document.createElement('div');
     previewBox.className = 'file-preview';
-    if (!item.isDir && isImageFile(item.name)) {
+    if (!item.isDir && hasGeneratedThumbnail(item.name)) {
       const thumb = document.createElement('img');
       thumb.className = 'file-thumb';
-      thumb.src = fileUrl(item.path);
       thumb.alt = '';
       thumb.loading = 'lazy';
+      thumb.decoding = 'async';
+      thumb.fetchPriority = 'low';
+      thumb.dataset.src = thumbUrl(item.path);
       thumb.onerror = () => {
         previewBox.classList.add('is-icon');
         previewBox.innerHTML = iconForItem(item);
       };
       previewBox.appendChild(thumb);
+      if (thumbObserver) {
+        thumbObserver.observe(thumb);
+      } else {
+        thumb.src = thumb.dataset.src;
+      }
     } else {
       previewBox.classList.add('is-icon');
       previewBox.innerHTML = iconForItem(item);
@@ -292,26 +330,31 @@ function renderList(items) {
 
     li.onclick = (e) => {
       const path = item.path;
+      let selectionChanged = false;
       if (e.target.closest('.select-dot')) {
         if (selectedPaths.has(path)) selectedPaths.delete(path);
         else selectedPaths.add(path);
-        renderList(items);
+        updateSelectionClasses();
         return;
       }
       if (e.shiftKey && selectedPaths.size > 0) {
         // Range select
-        const allItemEls = Array.from(document.querySelectorAll('.file-item'));
+        const allItemEls = Array.from(ul.querySelectorAll('.file-item'));
         const lastSelected = Array.from(selectedPaths).pop();
         const lastIdx = allItemEls.findIndex(el => el.dataset.path === lastSelected);
         const currIdx = allItemEls.findIndex(el => el.dataset.path === path);
-        const [start, end] = [Math.min(lastIdx, currIdx), Math.max(lastIdx, currIdx)];
-        for (let i = start; i <= end; i++) {
-          selectedPaths.add(allItemEls[i].dataset.path);
+        if (lastIdx >= 0 && currIdx >= 0) {
+          const [start, end] = [Math.min(lastIdx, currIdx), Math.max(lastIdx, currIdx)];
+          for (let i = start; i <= end; i++) {
+            selectedPaths.add(allItemEls[i].dataset.path);
+          }
+          selectionChanged = true;
         }
       } else if (e.ctrlKey || e.metaKey) {
         // Toggle
         if (selectedPaths.has(path)) selectedPaths.delete(path);
         else selectedPaths.add(path);
+        selectionChanged = true;
       } else {
         // Regular click: Just preview or navigate, don't touch selection
         if (item.isDir) {
@@ -320,7 +363,7 @@ function renderList(items) {
           preview(item.path);
         }
       }
-      renderList(items);
+      if (selectionChanged) updateSelectionClasses();
     };
 
     li.ondblclick = (e) => {
@@ -335,12 +378,22 @@ function renderList(items) {
       dl.setAttribute('aria-label', 'Download');
       dl.title = 'Download';
       dl.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0l4-4m-4 4l-4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"/></svg>';
-      dl.onclick = () => downloadFile(item.path, item.name);
+      dl.onclick = (e) => {
+        e.stopPropagation();
+        downloadFile(item.path, item.name);
+      };
       actions.appendChild(dl);
       li.appendChild(actions);
     }
 
-    ul.appendChild(li);
+    fragment.appendChild(li);
+  });
+  ul.appendChild(fragment);
+}
+
+function updateSelectionClasses() {
+  document.querySelectorAll('.file-item').forEach(el => {
+    el.classList.toggle('selected', selectedPaths.has(el.dataset.path));
   });
 }
 
@@ -828,13 +881,16 @@ function closeModal(result) {
 
 // Search
 document.getElementById('searchInput').addEventListener('input', (e) => {
+  window.clearTimeout(searchTimer);
   const query = e.target.value.toLowerCase();
-  if (!query) {
-    renderList(allItems);
-    return;
-  }
-  const filtered = allItems.filter(item => item.name.toLowerCase().includes(query));
-  renderList(filtered);
+  searchTimer = window.setTimeout(() => {
+    if (!query) {
+      renderList(allItems);
+      return;
+    }
+    const filtered = allItems.filter(item => item.name.toLowerCase().includes(query));
+    renderList(filtered);
+  }, 120);
 });
 
 // Theme toggle
@@ -940,6 +996,7 @@ if (savedSort && sortLabels[savedSort]) {
 }
 
 async function init() {
+  initSelectionBox();
   isAuthed = await checkAuth();
   if (!isAuthed) {
     loginOverlay.classList.remove('hidden');
@@ -948,7 +1005,6 @@ async function init() {
   }
   loginOverlay.classList.add('hidden');
   load('');
-  initSelectionBox();
 }
 
 function rectIntersects(r1, r2) {
@@ -956,6 +1012,8 @@ function rectIntersects(r1, r2) {
 }
 
 function initSelectionBox() {
+  if (selectionBoxInitialized) return;
+  selectionBoxInitialized = true;
   const list = document.getElementById('list');
   const box = document.createElement('div');
   box.className = 'selection-box';
@@ -971,18 +1029,30 @@ function initSelectionBox() {
 
     if (!inItem) {
       selectedPaths.clear();
-      renderList(allItems);
+      updateSelectionClasses();
     }
 
     selectionDrag = {
       startX: e.clientX,
       startY: e.clientY,
-      box: box
+      box: box,
+      baseSelection: new Set(selectedPaths),
+      hasMoved: false
     };
   });
 
   document.addEventListener('mousemove', (e) => {
     if (!selectionDrag) return;
+    pendingSelectionEvent = e;
+    if (selectionFrame) return;
+    selectionFrame = window.requestAnimationFrame(() => {
+      selectionFrame = 0;
+      updateDragSelection(pendingSelectionEvent);
+    });
+  });
+
+  function updateDragSelection(e) {
+    if (!selectionDrag || !e) return;
     const { startX, startY, box } = selectionDrag;
     const left = Math.min(startX, e.clientX);
     const top = Math.min(startY, e.clientY);
@@ -990,6 +1060,7 @@ function initSelectionBox() {
     const height = Math.abs(startY - e.clientY);
 
     if (width > 5 || height > 5) {
+      selectionDrag.hasMoved = true;
       box.style.display = 'block';
       box.style.left = left + 'px';
       box.style.top = top + 'px';
@@ -997,23 +1068,29 @@ function initSelectionBox() {
       box.style.height = height + 'px';
 
       const boxRect = box.getBoundingClientRect();
-      const items = document.querySelectorAll('.file-item');
+      const items = list.querySelectorAll('.file-item');
+      if (!e.ctrlKey && !e.metaKey) {
+        selectedPaths.clear();
+      } else {
+        selectedPaths = new Set(selectionDrag.baseSelection);
+      }
       items.forEach(el => {
         const itemRect = el.getBoundingClientRect();
         if (rectIntersects(boxRect, itemRect)) {
           selectedPaths.add(el.dataset.path);
-        } else if (!e.ctrlKey && !e.metaKey) {
-          // If not holding ctrl, box selection is exclusive to what it touches
-          // But we only remove if it WAS selected in THIS drag session? 
-          // Simplest: box select adds to selection
         }
       });
-      renderList(allItems);
+      updateSelectionClasses();
     }
-  });
+  }
 
   document.addEventListener('mouseup', () => {
     if (selectionDrag) {
+      if (selectionFrame) {
+        window.cancelAnimationFrame(selectionFrame);
+        selectionFrame = 0;
+      }
+      pendingSelectionEvent = null;
       selectionDrag.box.style.display = 'none';
       selectionDrag = null;
     }

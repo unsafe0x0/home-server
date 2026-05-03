@@ -1,4 +1,4 @@
-# <img src="assets/logo.svg" width="28" height="28" alt="logo" /> Unsafe0Server
+# Unsafe0Server
 
 A minimal, self-hosted file server with a modern web-based file manager UI. Built with Go and vanilla JS/CSS.
 

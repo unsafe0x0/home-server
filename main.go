@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,6 +63,7 @@ func main() {
 	http.HandleFunc("/api/login", loginHandler)
 	http.HandleFunc("/api/me", meHandler)
 	http.Handle("/api/list", authHandler(http.HandlerFunc(listHandler)))
+	http.Handle("/api/thumb", authHandler(http.HandlerFunc(thumbHandler)))
 	http.Handle("/api/upload", authHandler(http.HandlerFunc(uploadHandler)))
 	http.Handle("/api/delete", authHandler(http.HandlerFunc(deleteHandler)))
 	http.Handle("/api/rename", authHandler(http.HandlerFunc(renameHandler)))
@@ -172,6 +178,82 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(entries)
+}
+
+func thumbHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	p := q.Get("path")
+	fsPath, ok := resolvePath(p)
+	if !ok {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	width := clampThumbSize(parseThumbSize(q.Get("w"), 96))
+	height := clampThumbSize(parseThumbSize(q.Get("h"), 96))
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(fsPath), "."))
+
+	if ext == "svg" {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		http.ServeFile(w, r, fsPath)
+		return
+	}
+
+	file, err := os.Open(fsPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	var src image.Image
+	switch ext {
+	case "jpg", "jpeg":
+		src, err = jpeg.Decode(file)
+	case "png":
+		src, err = png.Decode(file)
+	case "gif":
+		src, err = gif.Decode(file)
+	default:
+		http.ServeFile(w, r, fsPath)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		return
+	}
+
+	bounds := src.Bounds()
+	if bounds.Empty() {
+		http.Error(w, "empty image", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	scale := float64(width) / float64(srcW)
+	if hScale := float64(height) / float64(srcH); hScale < scale {
+		scale = hScale
+	}
+	if scale > 1 {
+		scale = 1
+	}
+	outW := maxInt(1, int(float64(srcW)*scale))
+	outH := maxInt(1, int(float64(srcH)*scale))
+	thumb := resizeNearest(src, outW, outH)
+
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	switch ext {
+	case "jpg", "jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+		_ = jpeg.Encode(w, thumb, &jpeg.Options{Quality: 72})
+	case "png":
+		w.Header().Set("Content-Type", "image/png")
+		_ = png.Encode(w, thumb)
+	case "gif":
+		w.Header().Set("Content-Type", "image/png")
+		_ = png.Encode(w, thumb)
+	}
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -304,4 +386,47 @@ func resolvePath(rel string) (string, bool) {
 		return "", false
 	}
 	return abs, true
+}
+
+func parseThumbSize(value string, fallback int) int {
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func clampThumbSize(value int) int {
+	if value < 24 {
+		return 24
+	}
+	if value > 256 {
+		return 256
+	}
+	return value
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func resizeNearest(src image.Image, width, height int) *image.RGBA {
+	dst := image.NewRGBA(image.Rect(0, 0, width, height))
+	bounds := src.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	for y := 0; y < height; y++ {
+		sy := bounds.Min.Y + (y*srcH)/height
+		for x := 0; x < width; x++ {
+			sx := bounds.Min.X + (x*srcW)/width
+			dst.Set(x, y, src.At(sx, sy))
+		}
+	}
+	return dst
 }
